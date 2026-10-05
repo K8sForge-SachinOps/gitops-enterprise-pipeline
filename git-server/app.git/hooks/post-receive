@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Git Server Post-Receive Hook: Triggers Enterprise CI/CD Pipeline
+# Triggered on 'git push' from developer workstation
+# ==============================================================================
+set -e
+
+CI_SCRIPT="/home/sachink8s/.gemini/antigravity-ide/scratch/gitops-enterprise-pipeline/app-source-repo/ci/build-and-deploy.sh"
+
+echo "--------------------------------------------------------------------------------"
+echo ">> [GIT-SERVER HOOK] Received Code Push from developer!"
+echo ">> [GIT-SERVER HOOK] Invoking automated CI build & sanity check gate..."
+echo "--------------------------------------------------------------------------------"
+
+# Read push metadata from stdin: <old-value> <new-value> <ref-name>
+while read oldrev newrev refname
+do
+    echo ">> [GIT-SERVER HOOK] Branch: ${refname} | New Revision: ${newrev}"
+    
+    # Run CI pipeline for core-api and nginx targeting dev environment
+    "${CI_SCRIPT}" "core-api" "dev" || exit 1
+    "${CI_SCRIPT}" "nginx" "dev" || exit 1
+done
+
+echo "--------------------------------------------------------------------------------"
+echo ">> [GIT-SERVER HOOK] Automated CI pipeline executed successfully!"
+echo "--------------------------------------------------------------------------------"
