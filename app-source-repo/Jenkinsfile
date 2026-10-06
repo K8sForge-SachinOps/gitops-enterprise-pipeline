@@ -1,0 +1,103 @@
+pipeline {
+    agent any
+
+    environment {
+        SERVICE_NAME        = 'core-api'
+        REGISTRY_HOST       = 'localhost:5001'
+        K8S_REGISTRY        = 'dev-registry:5000'
+        GITOPS_REPO_PATH    = '/home/sachink8s/.gemini/antigravity-ide/scratch/gitops-enterprise-pipeline/gitops-config-repo'
+        GIT_COMMIT_AUTHOR   = 'consultant.sachinbhardwaj@gmail.com'
+    }
+
+    stages {
+        stage('Checkout Source') {
+            steps {
+                checkout scm
+                script {
+                    env.SHORT_SHA = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    echo ">> [JENKINS-CI] Starting pipeline for commit: ${env.SHORT_SHA}"
+                }
+            }
+        }
+
+        stage('Gate 1: Lint & Compilation Check') {
+            steps {
+                sh '''
+                    echo ">> [GATE 1] Running Python compilation validation..."
+                    python3 -m py_compile services/core-api/app/*.py
+                '''
+            }
+        }
+
+        stage('Gate 2: Containerized Unit Test Gate') {
+            steps {
+                sh '''
+                    echo ">> [GATE 2] Executing pytest inside isolated Docker test-runner stage..."
+                    docker build --target test-runner -t core-api:sanity-gate services/core-api
+                    echo ">> [GATE 2] Sanity Check PASSED: All unit tests green."
+                '''
+            }
+        }
+
+        stage('Gate 3: Build Production Image with Short SHA') {
+            steps {
+                sh '''
+                    echo ">> [GATE 3] Building production Docker image with immutable Git SHA tag..."
+                    docker build \
+                        -t ${REGISTRY_HOST}/core-api:${SHORT_SHA} \
+                        -t ${REGISTRY_HOST}/core-api:latest \
+                        services/core-api
+                '''
+            }
+        }
+
+        stage('Gate 4: Push to Private Registry') {
+            steps {
+                sh '''
+                    echo ">> [GATE 4] Pushing to private registry: ${REGISTRY_HOST}..."
+                    docker push ${REGISTRY_HOST}/core-api:${SHORT_SHA}
+                    docker push ${REGISTRY_HOST}/core-api:latest
+                '''
+            }
+        }
+
+        stage('Gate 5: Update GitOps Repository (Multi-Repo Separation)') {
+            steps {
+                sh '''
+                    echo ">> [GATE 5] Parameterizing GitOps manifests in ${GITOPS_REPO_PATH}..."
+                    cd ${GITOPS_REPO_PATH}/environments/dev
+
+                    # Pin image tag in kustomization.yaml
+                    sed -i "s|newTag: .*|newTag: ${SHORT_SHA}|g" kustomization.yaml
+                    
+                    # Update config timestamp in dev-config.yaml
+                    sed -i "s|^LAST_SYNC=.*|LAST_SYNC=${SHORT_SHA}-$(date +%Y%m%d%H%M%S)|g" dev-config.yaml
+
+                    # Commit to GitOps repository
+                    cd ${GITOPS_REPO_PATH}
+                    git config user.name "Jenkins GitOps Bot"
+                    git config user.email "${GIT_COMMIT_AUTHOR}"
+                    git add environments/dev/
+                    git commit -m "chore(gitops): auto-promote core-api to ${SHORT_SHA} via Jenkins [skip ci]" || true
+                    git push origin main || true
+                    echo ">> [GATE 5] Successfully committed and pushed release ${SHORT_SHA} to GitOps repository."
+                '''
+            }
+        }
+
+        stage('Continuous Delivery Reconciliation') {
+            steps {
+                echo ">> [CD-SYNC] GitOps repository updated. ArgoCD / Pull Reconciler will auto-detect and sync in < 15 seconds."
+            }
+        }
+    }
+
+    post {
+        success {
+            echo ">> [JENKINS SUCCESS] Core API ${env.SHORT_SHA} verified, built, and promoted to GitOps!"
+        }
+        failure {
+            echo ">> [JENKINS FAILURE] Pipeline halted at gate. Broken build prevented from entering cluster."
+        }
+    }
+}

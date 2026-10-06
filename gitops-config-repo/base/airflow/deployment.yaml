@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/part-of: enterprise-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+  template:
+    metadata:
+      labels:
+        app: airflow
+    spec:
+      containers:
+      - name: airflow
+        image: apache/airflow:2.10.2-python3.12
+        imagePullPolicy: IfNotPresent
+        command: ["bash", "-c"]
+        args:
+        - |
+          airflow standalone
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: AIRFLOW__CORE__LOAD_EXAMPLES
+          value: "False"
+        - name: AIRFLOW__WEBSERVER__BASE_URL
+          value: "http://localhost/airflow"
+        - name: AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION
+          value: "True"
+        - name: _AIRFLOW_WWW_USER_USERNAME
+          value: "admin"
+        - name: _AIRFLOW_WWW_USER_PASSWORD
+          value: "enterpriseAirflow123"
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2048Mi"
+        startupProbe:
+          httpGet:
+            path: /airflow/health
+            port: 8080
+          failureThreshold: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /airflow/health
+            port: 8080
+          periodSeconds: 20
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /airflow/health
+            port: 8080
+          periodSeconds: 10
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-service
+  labels:
+    app: airflow
+spec:
+  type: ClusterIP
+  selector:
+    app: airflow
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http

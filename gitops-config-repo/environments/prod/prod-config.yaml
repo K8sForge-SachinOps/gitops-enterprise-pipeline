@@ -1,0 +1,8 @@
+ENVIRONMENT=prod
+LOG_LEVEL=WARNING
+PORT=8000
+REPLICA_COUNT=3
+GATEWAY_NODEPORT=30080
+DEPLOYED_BY=GitOps-Prod-Release
+COMMITTER=consultant.sachinbhardwaj@gmail.com
+LAST_SYNC=production-sealed

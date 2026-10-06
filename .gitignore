@@ -19,3 +19,4 @@ venv/
 # Logs and runtime data
 *.log
 scratch/
+.git_source/

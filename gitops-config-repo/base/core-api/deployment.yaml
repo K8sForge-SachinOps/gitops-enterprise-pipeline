@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api
+  labels:
+    app.kubernetes.io/name: core-api
+    app.kubernetes.io/part-of: enterprise-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: core-api
+  template:
+    metadata:
+      labels:
+        app: core-api
+    spec:
+      containers:
+      - name: core-api
+        image: dev-registry:5000/core-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: APP_NAME
+          value: "Enterprise Core API"
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: env-config
+              key: ENVIRONMENT
+              optional: true
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: env-config
+              key: LOG_LEVEL
+              optional: true
+        - name: MONGODB_URI
+          value: "mongodb://mongodb-service:27017/enterprise_db"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "250m"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-api-service
+  labels:
+    app: core-api
+spec:
+  type: ClusterIP
+  selector:
+    app: core-api
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http

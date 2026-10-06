@@ -1,0 +1,8 @@
+ENVIRONMENT=uat
+LOG_LEVEL=INFO
+PORT=8000
+REPLICA_COUNT=2
+GATEWAY_NODEPORT=30081
+DEPLOYED_BY=GitOps-UAT-Promotion
+COMMITTER=consultant.sachinbhardwaj@gmail.com
+LAST_SYNC=staging-baseline
